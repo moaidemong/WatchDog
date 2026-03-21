@@ -1,0 +1,21 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run pipeline",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/scripts/run_pipeline.py",
+      "args": ["--config", "configs/app.example.yaml"],
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "Python: API",
+      "type": "python",
+      "request": "launch",
+      "module": "uvicorn",
+      "args": ["app.api.server:app", "--reload", "--port", "8000"],
+      "console": "integratedTerminal"
+    }
+  ]
+}

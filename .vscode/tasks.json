@@ -1,0 +1,23 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "pytest",
+      "type": "shell",
+      "command": "pytest -q",
+      "problemMatcher": []
+    },
+    {
+      "label": "run pipeline",
+      "type": "shell",
+      "command": "python scripts/run_pipeline.py --config configs/app.example.yaml",
+      "problemMatcher": []
+    },
+    {
+      "label": "run api",
+      "type": "shell",
+      "command": "uvicorn app.api.server:app --reload --port 8000",
+      "problemMatcher": []
+    }
+  ]
+}

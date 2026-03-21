@@ -1,0 +1,21 @@
+app_name: dog-rise-alert
+storage:
+  artifacts_dir: artifacts
+  review_queue_dir: review_queue
+  exports_dir: exports
+pipeline:
+  frame_window_size: 30
+  detector_confidence_threshold: 0.50
+  event_gap_seconds: 2.0
+  min_event_seconds: 3.0
+  alert_cooldown_seconds: 300.0
+rules:
+  failed_attempt_min_attempts: 2
+  failed_attempt_min_duration_seconds: 10.0
+  min_body_lift_ratio: 0.07
+  max_progress_ratio: 0.50
+notifier:
+  backend: stdout
+  telegram:
+    bot_token_env: TELEGRAM_BOT_TOKEN
+    chat_id_env: TELEGRAM_CHAT_ID
