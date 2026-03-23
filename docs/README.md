@@ -12,6 +12,9 @@
 - `06_Evaluation_and_Iteration.md` — 평가 기준, 실험, 액티브 러닝
 - `07_VSCode_ChatGPT_5_4_Working_Guide.md` — VSCode에서 ChatGPT 5.4와 협업하는 방식
 - `08_Risk_and_Safety.md` — 한계, 오탐/미탐, 안전 대책
+- `decisions/DECISION-0001-raspberry-pi-ai-hat-topology.md` — 라즈베리파이 5 + AI HAT+ 실행 토폴로지 결정
+- `decisions/DECISION-0002-camera-placement-and-roi.md` — Camera Module v3 설치/ROI 운영 기준
+- `decisions/DECISION-0003-edge-inference-budget.md` — 엣지 추론 자원 예산과 운영 임계치
 - `AGENTS.md` — AI 협업 에이전트용 운영 지침
 
 ## 핵심 아이디어
@@ -53,6 +56,7 @@
 3. `02_Data_Collection_and_Labeling.md` 기반으로 데이터 수집 시작
 4. `04_Implementation_Plan.md` 순서대로 MVP 구현
 5. `06_Evaluation_and_Iteration.md`로 반복 개선
+6. `decisions/` 문서로 실제 장비 토폴로지와 운영 예산 고정
 
 ## 구현 철학
 - 작은 문제로 쪼개기

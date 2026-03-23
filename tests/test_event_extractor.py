@@ -16,3 +16,16 @@ def test_event_merge_logic_splits_on_large_gap() -> None:
     assert len(events) == 2
     assert events[0].start_s == 0.0
     assert events[1].start_s == 8.0
+
+
+def test_streaming_event_extractor_finalizes_after_gap() -> None:
+    extractor = EventExtractor(ExtractorConfig(event_gap_seconds=2.0, min_event_seconds=2.0))
+
+    assert extractor.add_detected_frame(Frame(index=0, timestamp_s=0.0)) == []
+    assert extractor.add_detected_frame(Frame(index=1, timestamp_s=2.0)) == []
+
+    completed = extractor.observe_timestamp(5.0)
+
+    assert len(completed) == 1
+    assert completed[0].start_s == 0.0
+    assert completed[0].end_s == 2.0

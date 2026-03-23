@@ -8,7 +8,7 @@ from typing import Iterable
 class Frame:
     index: int
     timestamp_s: float
-    payload: bytes | None = None
+    payload: object | None = None
 
 
 class FrameSource:

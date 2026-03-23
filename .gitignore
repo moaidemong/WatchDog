@@ -7,6 +7,8 @@ __pycache__/
 .coverage
 htmlcov/
 logs/
+hailort.log
+configs/* copy.yaml
 artifacts/
 review_queue/
 exports/

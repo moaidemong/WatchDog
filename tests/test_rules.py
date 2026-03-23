@@ -21,4 +21,5 @@ def test_rules_threshold_behavior() -> None:
     )
     decision = engine.evaluate(features)
     assert decision.should_alert is True
+    assert decision.should_review is True
     assert decision.label == "failed_get_up_attempt"

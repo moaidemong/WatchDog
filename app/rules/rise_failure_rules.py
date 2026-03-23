@@ -7,6 +7,7 @@ from app.core.schemas import EventFeatureVector
 @dataclass(slots=True)
 class RuleDecision:
     should_alert: bool
+    should_review: bool
     label: str
     reasons: list[str]
     score: float
@@ -42,5 +43,12 @@ class RiseFailureRuleEngine:
             score += 0.20
 
         should_alert = len(reasons) == 4
+        should_review = len(reasons) >= 2
         label = "failed_get_up_attempt" if should_alert else "no_alert"
-        return RuleDecision(should_alert=should_alert, label=label, reasons=reasons, score=round(score, 3))
+        return RuleDecision(
+            should_alert=should_alert,
+            should_review=should_review,
+            label=label,
+            reasons=reasons,
+            score=round(score, 3),
+        )

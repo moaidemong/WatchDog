@@ -7,11 +7,16 @@ from pathlib import Path
 from app.classifier.dataset import append_labeled_feature_row
 from app.core.config import Settings
 from app.core.time_utils import utc_now_iso
-from app.detection.mock_detector import MockDogDetector
+from app.detection.base import DogDetector
+from app.detection.factory import build_detector
+from app.events.clip_saver import EventClipSaver
 from app.events.event_extractor import EventExtractor, ExtractorConfig
 from app.features.extractor import FeatureExtractor
-from app.ingest.mock_source import MockFrameSource
+from app.ingest.factory import build_frame_source
+from app.ingest.frame_source import FrameSource
+from app.ingest.motion_gate import MotionGate
 from app.notify.factory import build_notifier
+from app.pose.base import PoseEstimator
 from app.pose.mock_pose_estimator import MockPoseEstimator
 from app.rules.rise_failure_rules import RiseFailureRuleConfig, RiseFailureRuleEngine
 from app.storage.alert_deduplicator import AlertDeduplicator
@@ -23,14 +28,16 @@ logger = logging.getLogger(__name__)
 class PipelineOrchestrator:
     def __init__(
         self,
-        frame_source: MockFrameSource,
-        detector: MockDogDetector,
+        frame_source: FrameSource,
+        detector: DogDetector,
         extractor: EventExtractor,
-        pose_estimator: MockPoseEstimator,
+        pose_estimator: PoseEstimator,
         feature_extractor: FeatureExtractor,
         rule_engine: RiseFailureRuleEngine,
         notifier,
         store: JsonFileStore,
+        clip_saver: EventClipSaver,
+        motion_gate: MotionGate,
         deduplicator: AlertDeduplicator,
         settings: Settings,
     ) -> None:
@@ -42,13 +49,15 @@ class PipelineOrchestrator:
         self.rule_engine = rule_engine
         self.notifier = notifier
         self.store = store
+        self.clip_saver = clip_saver
+        self.motion_gate = motion_gate
         self.deduplicator = deduplicator
         self.settings = settings
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "PipelineOrchestrator":
-        frame_source = MockFrameSource(total_frames=60, fps=2.0)
-        detector = MockDogDetector()
+        frame_source = build_frame_source(settings.ingest)
+        detector = build_detector(settings.detection)
         extractor = EventExtractor(
             ExtractorConfig(
                 event_gap_seconds=settings.pipeline.event_gap_seconds,
@@ -67,6 +76,8 @@ class PipelineOrchestrator:
         )
         notifier = build_notifier(settings.notifier)
         store = JsonFileStore()
+        clip_saver = EventClipSaver()
+        motion_gate = MotionGate(settings.motion_gate)
         deduplicator = AlertDeduplicator(cooldown_seconds=settings.pipeline.alert_cooldown_seconds)
         return cls(
             frame_source=frame_source,
@@ -77,6 +88,8 @@ class PipelineOrchestrator:
             rule_engine=rule_engine,
             notifier=notifier,
             store=store,
+            clip_saver=clip_saver,
+            motion_gate=motion_gate,
             deduplicator=deduplicator,
             settings=settings,
         )
@@ -92,45 +105,60 @@ class PipelineOrchestrator:
     def run_once(self) -> None:
         self._ensure_directories()
 
-        detected_frames = []
         for frame in self.frame_source.read_frames():
+            for event in self.extractor.observe_timestamp(frame.timestamp_s):
+                self._process_event(event)
+
+            motion_decision = self.motion_gate.evaluate(frame)
+            if not motion_decision.should_process:
+                continue
             detections = self.detector.detect(frame)
             if any(d.label == "dog" and d.confidence >= self.settings.pipeline.detector_confidence_threshold for d in detections):
-                detected_frames.append(frame)
+                for event in self.extractor.add_detected_frame(frame):
+                    self._process_event(event)
 
-        events = self.extractor.merge_frames_into_events(detected_frames)
-        logger.info("detected %s candidate events", len(events))
+        for event in self.extractor.flush():
+            self._process_event(event)
 
-        for event in events:
-            pose_frames = self.pose_estimator.estimate(event)
-            features = self.feature_extractor.extract(event, pose_frames)
-            decision = self.rule_engine.evaluate(features)
+    def _process_event(self, event) -> None:
+        logger.info("processing candidate event %s", event.event_id)
+        media_artifacts = self.clip_saver.save(self.settings.storage.artifacts_dir, event)
+        pose_frames = self.pose_estimator.estimate(event)
+        features = self.feature_extractor.extract(event, pose_frames)
+        decision = self.rule_engine.evaluate(features)
 
-            artifact = {
-                "captured_at": utc_now_iso(),
-                "event": {
-                    "event_id": event.event_id,
-                    "start_s": event.start_s,
-                    "end_s": event.end_s,
-                    "duration_s": event.duration_s,
-                    "frame_count": len(event.frames),
-                },
-                "features": features.to_dict(),
-                "decision": asdict(decision),
-            }
-            self.store.write(self.settings.storage.artifacts_dir / f"{event.event_id}.json", artifact)
+        artifact = {
+            "captured_at": utc_now_iso(),
+            "event": {
+                "event_id": event.event_id,
+                "start_s": event.start_s,
+                "end_s": event.end_s,
+                "duration_s": event.duration_s,
+                "frame_count": len(event.frames),
+            },
+            "media": {
+                "event_dir": str(media_artifacts.event_dir),
+                "clip_path": str(media_artifacts.clip_path) if media_artifacts.clip_path else None,
+                "snapshot_path": str(media_artifacts.snapshot_path) if media_artifacts.snapshot_path else None,
+            },
+            "features": features.to_dict(),
+            "decision": asdict(decision),
+        }
+        self.store.write(media_artifacts.event_dir / "metadata.json", artifact)
 
-            label = decision.label
-            append_labeled_feature_row(self.settings.storage.exports_dir / "feature_dataset.csv", features, label)
+        label = decision.label
+        append_labeled_feature_row(self.settings.storage.exports_dir / "feature_dataset.csv", features, label)
 
-            if decision.should_alert and self.deduplicator.should_send("failed_get_up_attempt", event.end_s):
-                title = "Dog Rise Alert"
-                body = (
-                    f"event={event.event_id}\n"
-                    f"duration={features.duration_s:.1f}s\n"
-                    f"attempts={features.attempt_count}\n"
-                    f"progress_ratio={features.progress_ratio}\n"
-                    f"reasons={', '.join(decision.reasons)}"
-                )
-                self.notifier.send(title, body)
-                self.store.write(self.settings.storage.review_queue_dir / f"{event.event_id}.json", artifact)
+        if decision.should_review:
+            self.store.write(self.settings.storage.review_queue_dir / f"{event.event_id}.json", artifact)
+
+        if decision.should_alert and self.deduplicator.should_send("failed_get_up_attempt", event.end_s):
+            title = "Dog Rise Alert"
+            body = (
+                f"event={event.event_id}\n"
+                f"duration={features.duration_s:.1f}s\n"
+                f"attempts={features.attempt_count}\n"
+                f"progress_ratio={features.progress_ratio}\n"
+                f"reasons={', '.join(decision.reasons)}"
+            )
+            self.notifier.send(title, body)
