@@ -13,6 +13,7 @@ class Picamera2FrameSourceConfig:
     max_frames: int | None = None
     frame_width: int | None = None
     frame_height: int | None = None
+    camera_id: str = "picamera2-camera"
 
 
 class Picamera2FrameSource(FrameSource):
@@ -59,6 +60,7 @@ class Picamera2FrameSource(FrameSource):
                 yield Frame(
                     index=emitted_frames,
                     timestamp_s=now - start_time,
+                    camera_id=self.config.camera_id,
                     payload=image,
                 )
                 emitted_frames += 1

@@ -15,11 +15,14 @@ from app.ingest.factory import build_frame_source
 def main() -> None:
     parser = argparse.ArgumentParser(description="Capture one frame from the configured camera backend")
     parser.add_argument("--config", required=True, help="Path to YAML config")
+    parser.add_argument("--camera-id", help="Optional camera ID override")
     parser.add_argument("--output", default="exports/camera_check.jpg", help="Snapshot output path")
     args = parser.parse_args()
 
     settings = load_settings(args.config)
-    frame_source = build_frame_source(settings.ingest)
+    if args.camera_id is not None:
+        settings.ingest.camera_id = args.camera_id
+    frame_source = build_frame_source(settings.ingest, settings.cameras)
     first_frame = next(iter(frame_source.read_frames()))
     image = first_frame.payload
     if image is None:

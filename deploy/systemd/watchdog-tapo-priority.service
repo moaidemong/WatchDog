@@ -1,0 +1,19 @@
+[Unit]
+Description=WatchDog TAPO priority collector (b > c > a)
+Wants=network-online.target
+After=network-online.target hailort.service
+
+[Service]
+Type=simple
+User=moai
+WorkingDirectory=/home/moai/Workspace/Codex/WatchDog
+EnvironmentFile=/home/moai/Workspace/Codex/WatchDog/configs/watchdog-tapo.env
+ExecStart=/usr/bin/env bash /home/moai/Workspace/Codex/WatchDog/scripts/run_tapo_priority.sh --loop --sleep-seconds 5 configs/app.tapo.multi.example.yaml b c a
+StandardOutput=journal
+StandardError=append:/home/moai/Workspace/Codex/WatchDog/watchdog-tapo-priority.stderr.log
+Restart=always
+RestartSec=10
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

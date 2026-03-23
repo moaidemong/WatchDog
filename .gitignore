@@ -8,7 +8,9 @@ __pycache__/
 htmlcov/
 logs/
 hailort.log
+hailort.*.log
 configs/* copy.yaml
+configs/watchdog-tapo.env
 artifacts/
 review_queue/
 exports/
@@ -18,3 +20,6 @@ data/raw/
 !review_queue/.gitkeep
 !exports/.gitkeep
 .vscode/*.local.json
+watchdog-*.stderr.log
+watchdog-*.lock
+gstshark_*/

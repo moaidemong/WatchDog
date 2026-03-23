@@ -8,6 +8,7 @@ from typing import Iterable
 class Frame:
     index: int
     timestamp_s: float
+    camera_id: str = "default"
     payload: object | None = None
 
 

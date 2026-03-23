@@ -55,3 +55,21 @@ def test_hailo_decoder_handles_ragged_class_outputs() -> None:
 
     assert len(detections) == 1
     assert detections[0].label == "dog"
+
+
+def test_hailo_decoder_keeps_normalized_coordinates() -> None:
+    detector = object.__new__(HailoHefDogDetector)
+    detector.config = HailoHefDogDetectorConfig(
+        model_path="dummy.hef",
+        labels_path=None,
+        dog_class_names=["dog"],
+        confidence_threshold=0.5,
+    )
+    detector._labels = ["dog"]
+
+    tensor = [[[0.1, 0.2, 0.8, 0.9, 0.7]]]
+    detections = detector._decode_nms_tensor("output", tensor, image_width=100, image_height=100)
+
+    assert len(detections) == 1
+    assert detections[0].bbox.x1 == 0.2
+    assert detections[0].bbox.y2 == 0.8

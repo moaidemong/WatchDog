@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+import os
 import yaml
 
 
@@ -16,12 +17,22 @@ class StorageSettings:
 @dataclass(slots=True)
 class IngestSettings:
     backend: str
+    camera_id: str
     camera_index: int
     device_path: str | None
+    rtsp_url: str | None
     sample_fps: float
     max_frames: int | None
     frame_width: int | None
     frame_height: int | None
+
+
+@dataclass(slots=True)
+class CameraSettings:
+    camera_id: str
+    rtsp_url: str
+    aliases: list[str]
+    enabled: bool = True
 
 
 @dataclass(slots=True)
@@ -81,6 +92,7 @@ class Settings:
     app_name: str
     storage: StorageSettings
     ingest: IngestSettings
+    cameras: list[CameraSettings]
     detection: DetectionSettings
     motion_gate: MotionGateSettings
     pipeline: PipelineSettings
@@ -97,6 +109,7 @@ def load_settings(path: str | Path) -> Settings:
     raw = _read_yaml(path)
     storage = raw["storage"]
     ingest = raw.get("ingest", {})
+    cameras = raw.get("cameras", [])
     detection = raw.get("detection", {})
     motion_gate = raw.get("motion_gate", {})
     pipeline = raw["pipeline"]
@@ -111,13 +124,24 @@ def load_settings(path: str | Path) -> Settings:
         ),
         ingest=IngestSettings(
             backend=ingest.get("backend", "mock"),
+            camera_id=ingest.get("camera_id", "default"),
             camera_index=ingest.get("camera_index", 0),
             device_path=ingest.get("device_path"),
+            rtsp_url=_expand_env(ingest.get("rtsp_url")),
             sample_fps=ingest.get("sample_fps", 2.0),
             max_frames=ingest.get("max_frames", 60),
             frame_width=ingest.get("frame_width"),
             frame_height=ingest.get("frame_height"),
         ),
+        cameras=[
+            CameraSettings(
+                camera_id=item["camera_id"],
+                rtsp_url=_expand_env(item["rtsp_url"]),
+                aliases=[str(alias) for alias in item.get("aliases", [])],
+                enabled=item.get("enabled", True),
+            )
+            for item in cameras
+        ],
         detection=DetectionSettings(
             backend=detection.get("backend", "mock"),
             confidence_threshold=detection.get("confidence_threshold", 0.5),
@@ -153,3 +177,9 @@ def _parse_roi(value: Any) -> tuple[float, float, float, float] | None:
         raise ValueError("motion_gate.roi must be a sequence of four floats")
     x1, y1, x2, y2 = (float(item) for item in value)
     return (x1, y1, x2, y2)
+
+
+def _expand_env(value: Any) -> Any:
+    if isinstance(value, str):
+        return os.path.expandvars(value)
+    return value

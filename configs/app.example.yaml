@@ -5,12 +5,15 @@ storage:
   exports_dir: exports
 ingest:
   backend: mock
+  camera_id: default
   camera_index: 0
   device_path:
+  rtsp_url:
   sample_fps: 2.0
   max_frames: 60
   frame_width:
   frame_height:
+cameras: []
 detection:
   backend: mock
   confidence_threshold: 0.50

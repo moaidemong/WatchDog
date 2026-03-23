@@ -1,0 +1,6 @@
+[Unit]
+Description=WatchDog ONVIF gated collectors (a, b, c)
+Wants=watchdog-onvif-gated@a.service watchdog-onvif-gated@b.service watchdog-onvif-gated@c.service
+
+[Install]
+WantedBy=multi-user.target

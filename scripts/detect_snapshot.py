@@ -17,6 +17,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run detector on a single snapshot image")
     parser.add_argument("--config", required=True, help="Path to YAML config")
     parser.add_argument("--image", required=True, help="Path to input image")
+    parser.add_argument("--debug", action="store_true", help="Print backend-specific raw summary")
     args = parser.parse_args()
 
     settings = load_settings(args.config)
@@ -35,6 +36,14 @@ def main() -> None:
         raise RuntimeError(
             f"detector backend '{settings.detection.backend}' does not support direct snapshot detection"
         )
+
+    if args.debug:
+        if not hasattr(detector, "debug_image"):
+            raise RuntimeError(
+                f"detector backend '{settings.detection.backend}' does not support debug summary"
+            )
+        print(json.dumps(detector.debug_image(image), ensure_ascii=False, indent=2))
+        return
 
     detections = detector.detect_image(image)
     payload = [

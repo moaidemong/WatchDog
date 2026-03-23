@@ -56,7 +56,7 @@ class PipelineOrchestrator:
 
     @classmethod
     def from_settings(cls, settings: Settings) -> "PipelineOrchestrator":
-        frame_source = build_frame_source(settings.ingest)
+        frame_source = build_frame_source(settings.ingest, settings.cameras)
         detector = build_detector(settings.detection)
         extractor = EventExtractor(
             ExtractorConfig(
@@ -113,7 +113,7 @@ class PipelineOrchestrator:
             if not motion_decision.should_process:
                 continue
             detections = self.detector.detect(frame)
-            if any(d.label == "dog" and d.confidence >= self.settings.pipeline.detector_confidence_threshold for d in detections):
+            if any(self._is_target_detection(detection) for detection in detections):
                 for event in self.extractor.add_detected_frame(frame):
                     self._process_event(event)
 
@@ -126,11 +126,13 @@ class PipelineOrchestrator:
         pose_frames = self.pose_estimator.estimate(event)
         features = self.feature_extractor.extract(event, pose_frames)
         decision = self.rule_engine.evaluate(features)
+        should_review = True
 
         artifact = {
             "captured_at": utc_now_iso(),
             "event": {
                 "event_id": event.event_id,
+                "camera_id": event.camera_id,
                 "start_s": event.start_s,
                 "end_s": event.end_s,
                 "duration_s": event.duration_s,
@@ -142,14 +144,17 @@ class PipelineOrchestrator:
                 "snapshot_path": str(media_artifacts.snapshot_path) if media_artifacts.snapshot_path else None,
             },
             "features": features.to_dict(),
-            "decision": asdict(decision),
+            "decision": {
+                **asdict(decision),
+                "should_review": should_review,
+            },
         }
         self.store.write(media_artifacts.event_dir / "metadata.json", artifact)
 
         label = decision.label
         append_labeled_feature_row(self.settings.storage.exports_dir / "feature_dataset.csv", features, label)
 
-        if decision.should_review:
+        if should_review:
             self.store.write(self.settings.storage.review_queue_dir / f"{event.event_id}.json", artifact)
 
         if decision.should_alert and self.deduplicator.should_send("failed_get_up_attempt", event.end_s):
@@ -162,3 +167,9 @@ class PipelineOrchestrator:
                 f"reasons={', '.join(decision.reasons)}"
             )
             self.notifier.send(title, body)
+
+    def _is_target_detection(self, detection) -> bool:
+        return (
+            detection.label in set(self.settings.detection.dog_class_names)
+            and detection.confidence >= self.settings.pipeline.detector_confidence_threshold
+        )

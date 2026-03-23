@@ -48,6 +48,34 @@ class HailoHefDogDetector(DogDetector):
     def detect_image(self, image: Any, *, frame_index: int = 0, timestamp_s: float = 0.0) -> list[Detection]:
         return self.detect(Frame(index=frame_index, timestamp_s=timestamp_s, payload=image))
 
+    def debug_image(self, image: Any) -> dict[str, Any]:
+        self._ensure_initialized()
+        prepared = self._prepare_image(image)
+        result = self._infer_pipeline.infer({self._input_name: prepared})
+        output_name, output_tensor = next(iter(result.items()))
+        class_boxes = self._iter_class_boxes(output_name, output_tensor)
+        class_summaries = []
+        for class_id, boxes in enumerate(class_boxes):
+            label = self._resolve_label(class_id)
+            scores = [float(row[4]) for row in boxes if len(row) >= 5]
+            if not scores:
+                continue
+            class_summaries.append(
+                {
+                    "class_id": class_id,
+                    "label": label,
+                    "count": len(scores),
+                    "max_score": round(max(scores), 6),
+                }
+            )
+        class_summaries.sort(key=lambda item: item["max_score"], reverse=True)
+        dog_entries = [item for item in class_summaries if item["label"] in self.config.dog_class_names]
+        return {
+            "output_name": output_name,
+            "top_classes": class_summaries[:10],
+            "dog_entries": dog_entries[:10],
+        }
+
     def close(self) -> None:
         infer_pipeline = self._infer_pipeline
         self._infer_pipeline = None
@@ -143,15 +171,17 @@ class HailoHefDogDetector(DogDetector):
                 if score < self.config.confidence_threshold:
                     continue
                 y1, x1, y2, x2 = [float(value) for value in row[:4]]
+                x1, x2 = self._normalize_axis(x1, x2, image_width)
+                y1, y2 = self._normalize_axis(y1, y2, image_height)
                 detections.append(
                     Detection(
                         label=label,
                         confidence=score,
                         bbox=BoundingBox(
-                            x1=max(0.0, min(1.0, x1 / image_width)),
-                            y1=max(0.0, min(1.0, y1 / image_height)),
-                            x2=max(0.0, min(1.0, x2 / image_width)),
-                            y2=max(0.0, min(1.0, y2 / image_height)),
+                            x1=x1,
+                            y1=y1,
+                            x2=x2,
+                            y2=y2,
                         ),
                     )
                 )
@@ -209,3 +239,14 @@ class HailoHefDogDetector(DogDetector):
         if 0 <= class_id < len(self._labels):
             return self._labels[class_id]
         return str(class_id)
+
+    def _normalize_axis(self, start: float, end: float, size: int) -> tuple[float, float]:
+        if max(abs(start), abs(end)) <= 1.5:
+            return (
+                max(0.0, min(1.0, start)),
+                max(0.0, min(1.0, end)),
+            )
+        return (
+            max(0.0, min(1.0, start / size)),
+            max(0.0, min(1.0, end / size)),
+        )

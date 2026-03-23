@@ -14,8 +14,10 @@ logger = logging.getLogger(__name__)
 class OpenCVFrameSourceConfig:
     camera_index: int = 0
     device_path: str | None = None
+    rtsp_url: str | None = None
     sample_fps: float = 2.0
     max_frames: int | None = None
+    camera_id: str = "opencv-camera"
 
 
 class OpenCVFrameSource(FrameSource):
@@ -35,7 +37,10 @@ class OpenCVFrameSource(FrameSource):
                 "Install the 'cv2' package in the runtime environment."
             ) from exc
 
-        source = self.config.device_path if self.config.device_path else self.config.camera_index
+        if self.config.rtsp_url:
+            source = self.config.rtsp_url
+        else:
+            source = self.config.device_path if self.config.device_path else self.config.camera_index
         capture = cv2.VideoCapture(source)
         if not capture.isOpened():
             capture.release()
@@ -62,6 +67,7 @@ class OpenCVFrameSource(FrameSource):
                 yield Frame(
                     index=emitted_frames,
                     timestamp_s=now - start_time,
+                    camera_id=self.config.camera_id,
                     payload=image,
                 )
                 emitted_frames += 1

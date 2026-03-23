@@ -146,3 +146,26 @@ services:
 - Telegram notifier
 - SQLite 또는 PostgreSQL
 - 오류 로그 파일 + 간단한 daily summary
+
+## 12. Raspberry Pi systemd 운영안
+현재 장비(`Raspberry Pi 5 + AI HAT+`)에서는 Hailo 장치를 여러 프로세스가 동시에 점유하지 않도록 단일 `systemd` 서비스가 `b -> c -> a` 순서로 카메라를 순환 수집하는 구성을 권장한다.
+
+권장 이유:
+- Hailo 장치 충돌 방지
+- 운영 우선순위(`b > c > a`) 반영
+- 재부팅 후 자동 복구 단순화
+
+예시 파일:
+- `deploy/systemd/watchdog-tapo-priority.service`
+- `configs/watchdog-tapo.env.example`
+- `scripts/run_tapo_priority.sh --loop`
+
+운영 명령:
+```bash
+cp configs/watchdog-tapo.env.example configs/watchdog-tapo.env
+sudo cp deploy/systemd/watchdog-tapo-priority.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now watchdog-tapo-priority.service
+sudo systemctl status watchdog-tapo-priority.service --no-pager
+journalctl -u watchdog-tapo-priority.service -f
+```

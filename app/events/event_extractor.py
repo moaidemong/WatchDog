@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from app.events.models import EventWindow
 from app.ingest.frame_source import Frame
 
@@ -31,9 +32,10 @@ class EventExtractor:
                 continue
 
             event = EventWindow(
-                event_id=f"event-{len(events)+1}",
+                event_id=self._build_event_id(current_frames[0], len(events) + 1),
                 start_s=start_s,
                 end_s=previous.timestamp_s,
+                camera_id=current_frames[0].camera_id,
                 frames=current_frames.copy(),
             )
             if event.duration_s >= self.config.min_event_seconds:
@@ -43,9 +45,10 @@ class EventExtractor:
             start_s = current.timestamp_s
 
         final_event = EventWindow(
-            event_id=f"event-{len(events)+1}",
+            event_id=self._build_event_id(current_frames[0], len(events) + 1),
             start_s=start_s,
             end_s=frames[-1].timestamp_s,
+            camera_id=current_frames[0].camera_id,
             frames=current_frames.copy(),
         )
         if final_event.duration_s >= self.config.min_event_seconds:
@@ -87,12 +90,23 @@ class EventExtractor:
 
         self._event_counter += 1
         event = EventWindow(
-            event_id=f"event-{self._event_counter}",
+            event_id=self._build_event_id(self._current_frames[0], self._event_counter),
             start_s=self._current_frames[0].timestamp_s,
             end_s=self._current_frames[-1].timestamp_s,
+            camera_id=self._current_frames[0].camera_id,
             frames=self._current_frames.copy(),
         )
         self._current_frames = []
         if event.duration_s >= self.config.min_event_seconds:
             return event
         return None
+
+    def _build_event_id(self, first_frame: Frame, sequence_number: int) -> str:
+        camera_slug = _slugify_camera_id(first_frame.camera_id)
+        start_ms = max(0, round(first_frame.timestamp_s * 1000))
+        return f"{camera_slug}-{start_ms:010d}-{sequence_number:04d}"
+
+
+def _slugify_camera_id(camera_id: str) -> str:
+    slug = re.sub(r"[^a-z0-9]+", "-", camera_id.lower()).strip("-")
+    return slug or "camera"

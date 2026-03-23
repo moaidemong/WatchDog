@@ -14,5 +14,6 @@ from app.main import main
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True)
+    parser.add_argument("--camera-id")
     args = parser.parse_args()
-    main(args.config)
+    main(args.config, camera_id=args.camera_id)

@@ -9,6 +9,7 @@ class EventWindow:
     event_id: str
     start_s: float
     end_s: float
+    camera_id: str = "default"
     frames: list[Frame] = field(default_factory=list)
 
     @property
