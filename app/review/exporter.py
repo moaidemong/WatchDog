@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from app.core.config import StorageSettings
+from app.review.draft import build_review_draft
 
 
 REVIEW_EXPORT_COLUMNS = [
@@ -41,11 +42,18 @@ class ReviewQueueExporter:
     def __init__(self, storage: StorageSettings) -> None:
         self.storage = storage
 
-    def export(self, export_dir: str | Path | None = None) -> ReviewExportResult:
+    def export(
+        self,
+        export_dir: str | Path | None = None,
+        *,
+        auto_triage: bool = False,
+    ) -> ReviewExportResult:
         target_dir = Path(export_dir) if export_dir else self.storage.exports_dir / "review_export"
         target_dir.mkdir(parents=True, exist_ok=True)
 
         rows = [self._build_row(path) for path in sorted(self.storage.review_queue_dir.glob("*.json"))]
+        if auto_triage:
+            rows = [self._apply_auto_triage(row) for row in rows]
         csv_path = target_dir / "review_manifest.csv"
         jsonl_path = target_dir / "review_manifest.jsonl"
         self._write_csv(csv_path, rows)
@@ -80,6 +88,14 @@ class ReviewQueueExporter:
             "review_label": "",
             "review_notes": "",
         }
+
+    def _apply_auto_triage(self, row: dict[str, Any]) -> dict[str, Any]:
+        decision = build_review_draft(row)
+        updated = row.copy()
+        updated["review_status"] = decision.review_status
+        updated["review_label"] = decision.review_label
+        updated["review_notes"] = decision.review_notes
+        return updated
 
     def _write_csv(self, path: Path, rows: list[dict[str, Any]]) -> None:
         with path.open("w", encoding="utf-8", newline="") as file_obj:

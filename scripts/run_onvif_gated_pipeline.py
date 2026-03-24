@@ -33,6 +33,7 @@ def main() -> None:
     parser.add_argument("--pull-timeout-seconds", type=int, default=5)
     parser.add_argument("--message-limit", type=int, default=20)
     parser.add_argument("--cooldown-seconds", type=int, default=20)
+    parser.add_argument("--reconnect-delay-seconds", type=float, default=3.0)
     parser.add_argument("--pipeline-lock-file")
     parser.add_argument("--wsdl-dir")
     parser.add_argument("--quiet", action="store_true")
@@ -61,16 +62,13 @@ def main() -> None:
     )
 
     events_service = camera.create_events_service()
-    subscription = events_service.CreatePullPointSubscription(
-        {"InitialTerminationTime": f"PT{max(1, args.duration_seconds)}S"}
+    pullpoint_service = _create_pullpoint_service(
+        camera,
+        events_service,
+        serialize_object,
+        max(1, args.duration_seconds),
+        quiet=args.quiet,
     )
-    subscription_data = serialize_object(subscription)
-    subscription_xaddr = _extract_subscription_xaddr(subscription_data)
-    if not args.quiet:
-        print(json.dumps({"subscription_xaddr": subscription_xaddr}, indent=2), flush=True)
-
-    camera.xaddrs["http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"] = subscription_xaddr
-    pullpoint_service = camera.create_pullpoint_service()
 
     last_trigger_at: dict[str, float] = {}
     total_messages = 0
@@ -82,9 +80,35 @@ def main() -> None:
         remaining_budget = args.pull_timeout_seconds
         if deadline is not None:
             remaining_budget = max(1, min(args.pull_timeout_seconds, int(deadline - time.monotonic())))
-        response = pullpoint_service.PullMessages(
-            {"Timeout": f"PT{remaining_budget}S", "MessageLimit": args.message_limit}
-        )
+        try:
+            response = pullpoint_service.PullMessages(
+                {"Timeout": f"PT{remaining_budget}S", "MessageLimit": args.message_limit}
+            )
+        except KeyboardInterrupt:
+            raise
+        except Exception as exc:
+            if not args.quiet:
+                print(
+                    json.dumps(
+                        {
+                            "camera_id": args.camera_id,
+                            "warning": "pull_messages_failed",
+                            "error": str(exc),
+                            "action": "resubscribe",
+                        },
+                        indent=2,
+                    ),
+                    flush=True,
+                )
+            time.sleep(max(0.0, args.reconnect_delay_seconds))
+            pullpoint_service = _create_pullpoint_service(
+                camera,
+                events_service,
+                serialize_object,
+                max(1, args.duration_seconds),
+                quiet=args.quiet,
+            )
+            continue
         serialized = serialize_object(response)
         messages = serialized.get("NotificationMessage") or []
         for message in messages:
@@ -162,6 +186,18 @@ def _extract_subscription_xaddr(subscription_data: dict[str, object]) -> str:
     if not address:
         raise RuntimeError(f"unable to extract PullPoint subscription address: {subscription_data}")
     return str(address)
+
+
+def _create_pullpoint_service(camera, events_service, serialize_object, duration_seconds: int, *, quiet: bool):
+    subscription = events_service.CreatePullPointSubscription(
+        {"InitialTerminationTime": f"PT{duration_seconds}S"}
+    )
+    subscription_data = serialize_object(subscription)
+    subscription_xaddr = _extract_subscription_xaddr(subscription_data)
+    if not quiet:
+        print(json.dumps({"subscription_xaddr": subscription_xaddr}, indent=2), flush=True)
+    camera.xaddrs["http://www.onvif.org/ver10/events/wsdl/PullPointSubscription"] = subscription_xaddr
+    return camera.create_pullpoint_service()
 
 
 @contextmanager
