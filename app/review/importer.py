@@ -55,40 +55,38 @@ class ReviewLabelImporter:
 
     def _append_labels(self, labels_path: Path, rows: list[dict[str, str]]) -> None:
         labels_path.parent.mkdir(parents=True, exist_ok=True)
-        existing_ids = set()
+        existing_rows: dict[str, dict[str, str]] = {}
         if labels_path.exists():
             with labels_path.open("r", encoding="utf-8", newline="") as file_obj:
-                existing_ids = {
-                    row["event_id"]
+                existing_rows = {
+                    row["event_id"]: row
                     for row in csv.DictReader(file_obj)
                     if row.get("event_id")
                 }
 
-        write_header = not labels_path.exists()
-        with labels_path.open("a", encoding="utf-8", newline="") as file_obj:
+        for row in rows:
+            event_id = row.get("event_id", "")
+            if not event_id:
+                continue
+            existing_rows[event_id] = {
+                "event_id": event_id,
+                "captured_at": row.get("captured_at", ""),
+                "start_s": row.get("start_s", ""),
+                "end_s": row.get("end_s", ""),
+                "duration_s": row.get("duration_s", ""),
+                "predicted_label": row.get("predicted_label", ""),
+                "review_label": row.get("review_label", ""),
+                "review_status": row.get("review_status", ""),
+                "review_notes": row.get("review_notes", ""),
+                "clip_path": row.get("clip_path", ""),
+                "snapshot_path": row.get("snapshot_path", ""),
+            }
+
+        with labels_path.open("w", encoding="utf-8", newline="") as file_obj:
             writer = csv.DictWriter(file_obj, fieldnames=LABEL_COLUMNS)
-            if write_header:
-                writer.writeheader()
-            for row in rows:
-                event_id = row.get("event_id", "")
-                if not event_id or event_id in existing_ids:
-                    continue
-                writer.writerow(
-                    {
-                        "event_id": event_id,
-                        "captured_at": row.get("captured_at", ""),
-                        "start_s": row.get("start_s", ""),
-                        "end_s": row.get("end_s", ""),
-                        "duration_s": row.get("duration_s", ""),
-                        "predicted_label": row.get("predicted_label", ""),
-                        "review_label": row.get("review_label", ""),
-                        "review_status": row.get("review_status", ""),
-                        "review_notes": row.get("review_notes", ""),
-                        "clip_path": row.get("clip_path", ""),
-                        "snapshot_path": row.get("snapshot_path", ""),
-                    }
-                )
-                existing_ids.add(event_id)
+            writer.writeheader()
+            for event_id in sorted(existing_rows):
+                writer.writerow(existing_rows[event_id])
 
     def _write_review_back(self, row: dict[str, str]) -> None:
         event_id = row.get("event_id")
