@@ -1,0 +1,19 @@
+[Unit]
+Description=WatchDog Review Web
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=moai
+WorkingDirectory=/home/moai/Workspace/Codex/WatchDog
+Environment=WATCHDOG_ROOT=/home/moai/Workspace/Codex/WatchDog
+Environment=WATCHDOG_CONFIG=/home/moai/Workspace/Codex/WatchDog/configs/app.tapo.multi.example.yaml
+Environment=REVIEW_WEB_DB_PATH=/home/moai/Workspace/Codex/WatchDog/review_web/data/review_web.sqlite3
+ExecStart=/home/moai/Workspace/Codex/WatchDog/.venv/bin/uvicorn review_web.app.main:app --host 127.0.0.1 --port 18010
+Restart=always
+RestartSec=5
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -55,15 +57,16 @@ class EventClipSaver:
             raise RuntimeError("OpenCV is required to write event clips.") from exc
 
         height, width = frames[0].shape[:2]
+        raw_path = path.with_suffix(".raw.mp4")
         writer = cv2.VideoWriter(
-            str(path),
+            str(raw_path),
             cv2.VideoWriter_fourcc(*"mp4v"),
             fps,
             (width, height),
         )
         if not writer.isOpened():
             writer.release()
-            raise RuntimeError(f"failed to open video writer for {path}")
+            raise RuntimeError(f"failed to open video writer for {raw_path}")
 
         try:
             for frame in frames:
@@ -72,6 +75,35 @@ class EventClipSaver:
                 writer.write(frame)
         finally:
             writer.release()
+
+        self._finalize_clip(raw_path, path)
+
+    def _finalize_clip(self, raw_path: Path, final_path: Path) -> None:
+        """Transcode clips to browser-friendly H.264 when ffmpeg is available."""
+        ffmpeg = shutil.which("ffmpeg")
+        if ffmpeg is None:
+            raw_path.replace(final_path)
+            return
+
+        command = [
+            ffmpeg,
+            "-y",
+            "-i",
+            str(raw_path),
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            str(final_path),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode != 0:
+            raw_path.replace(final_path)
+            return
+
+        raw_path.unlink(missing_ok=True)
 
     def _write_snapshot(self, path: Path, image: Any) -> None:
         try:

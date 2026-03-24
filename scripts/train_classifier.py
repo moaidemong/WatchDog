@@ -28,12 +28,22 @@ def main() -> None:
         "--output-model",
         help="Optional model output path override",
     )
+    parser.add_argument(
+        "--min-samples-per-label",
+        type=int,
+        default=5,
+        help="Minimum approved samples required for a label to be included in the prototype model",
+    )
     args = parser.parse_args()
 
     settings = load_settings(args.config)
     feature_dataset_path = args.feature_dataset or (settings.storage.exports_dir / "feature_dataset.csv")
     reviewed_labels_path = args.reviewed_labels or (settings.storage.exports_dir / "labels" / "clips.csv")
-    summary = train_classifier(feature_dataset_path, reviewed_labels_path)
+    summary = train_classifier(
+        feature_dataset_path,
+        reviewed_labels_path,
+        min_samples_per_label=max(1, args.min_samples_per_label),
+    )
     model = summary.pop("model")
     output_model = args.output_model or (settings.storage.exports_dir / "models" / "prototype_classifier.json")
     model_path = model.save(output_model)

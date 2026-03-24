@@ -33,6 +33,7 @@ python -m pip install -e .[onvif]
 python scripts/test_onvif_events.py --config configs/app.tapo.multi.example.yaml --camera-id b
 python scripts/run_onvif_gated_pipeline.py --config configs/app.tapo.multi.example.yaml --camera-id b --wsdl-dir /tmp/python-onvif-zeep/wsdl
 bash scripts/run_onvif_gated_service.sh b
+./.venv/bin/uvicorn review_web.app.main:app --host 127.0.0.1 --port 18010
 python scripts/export_review_queue.py --config configs/app.example.yaml
 python scripts/import_review_labels.py --config configs/app.example.yaml --manifest exports/review_export/review_manifest.csv
 python scripts/train_classifier.py --config configs/app.example.yaml
@@ -79,6 +80,15 @@ sudo systemctl status watchdog-onvif-gated@c.service --no-pager
 journalctl -u watchdog-onvif-gated@b.service -f
 tail -f watchdog-onvif-b.stderr.log
 ```
+
+리뷰 웹 서비스 예시:
+```bash
+cd /home/moai/Workspace/Codex/WatchDog
+source .venv/bin/activate
+uvicorn review_web.app.main:app --host 127.0.0.1 --port 18010
+```
+
+리뷰 웹 서비스는 [review_web](/home/moai/Workspace/Codex/WatchDog/review_web) 아래에 별도 모듈로 분리되어 있습니다. SQLite를 사용해 `review_manifest.csv` 내용을 조회/수정하며, `clip.mp4`와 `snapshot.jpg`를 브라우저에서 바로 열 수 있습니다.
 
 ## 현재 구현 상태
 - 실제 카메라 입력: OpenCV `VideoCapture` 기반 로컬 카메라 소스 제공

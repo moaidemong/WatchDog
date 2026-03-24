@@ -9,15 +9,27 @@ from app.classifier.model import FEATURE_NAMES, Prototype, PrototypeModel
 def train_classifier(
     feature_dataset_path: str | Path,
     reviewed_labels_path: str | Path,
+    *,
+    min_samples_per_label: int = 1,
 ) -> dict[str, object]:
     rows = load_reviewed_training_rows(feature_dataset_path, reviewed_labels_path)
     summary = summarize_reviewed_training_rows(rows)
-    prototypes = _build_prototypes(rows)
+    label_counts = dict(summary["label_counts"])
+    included_labels = sorted([label for label, count in label_counts.items() if count >= min_samples_per_label])
+    excluded_labels = {
+        label: count for label, count in label_counts.items() if count < min_samples_per_label
+    }
+    filtered_rows = [row for row in rows if row.review_label in set(included_labels)]
+    prototypes = _build_prototypes(filtered_rows)
     summary["model"] = PrototypeModel(
         model_type="nearest_prototype",
         feature_names=FEATURE_NAMES.copy(),
         prototypes=prototypes,
     )
+    summary["min_samples_per_label"] = min_samples_per_label
+    summary["included_labels"] = included_labels
+    summary["excluded_labels"] = excluded_labels
+    summary["training_row_count"] = len(filtered_rows)
     return summary
 
 
